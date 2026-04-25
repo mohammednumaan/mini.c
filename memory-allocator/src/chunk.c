@@ -1,13 +1,14 @@
 #include <sys/mman.h>
 #include <stdio.h>
 #include <string.h>
+#include <assert.h>
 
 #define CHUNK_HEADER_SIZE sizeof(Chunk)
 #define PAGE_SIZE 4096
 #define HEAP_SIZE (PAGE_SIZE * 256)
 
 // reference article: https://rahalkar.dev/posts/2025-10-25-writing-memory-allocator-heap-internals/
-typedef struct {
+typedef struct Chunk {
     size_t size;
     int is_free;
     struct Chunk *next;
@@ -24,7 +25,7 @@ void heap_init(void){
 
     heap_start = (Chunk *)memory;
     heap_start->size = HEAP_SIZE - CHUNK_HEADER_SIZE;
-    heap_start->is_free = 0;
+    heap_start->is_free = 1;
     heap_start->next = NULL;
     heap_start->prev = NULL;
     heap_end = (char *)memory + HEAP_SIZE;
@@ -66,7 +67,29 @@ void ch_split_chunk(Chunk *allocated_chunk, size_t size){
     allocated_chunk->size = size;
 }
 
-Chunk* ch_alloc(size_t size){
+void ch_coalesce_chunk(Chunk *chunk){
+
+    // forward merge
+    if (chunk->next && chunk->next->is_free){
+        chunk->size += CHUNK_HEADER_SIZE + chunk->next->size;
+        chunk->next = chunk->next->next;
+        if (chunk->next){
+            chunk->next->prev = chunk;
+        }
+
+    }
+
+    // backward merge
+    if (chunk->prev && chunk->prev->is_free){
+        chunk->prev->size += CHUNK_HEADER_SIZE + chunk->size;
+        chunk->prev->next = chunk->next;        
+        if (chunk->next){
+            chunk->next->prev = chunk->prev;
+        }
+
+    }
+}
+void* ch_alloc(size_t size){
     if (size == 0) return NULL;
     if (!heap_start) heap_init();
 
@@ -83,4 +106,12 @@ Chunk* ch_alloc(size_t size){
     free_chunk->is_free = 0;
 
     return (void *)(free_chunk + 1);
+}
+
+void ch_free(void *ptr){
+    if (!ptr) return;
+
+    Chunk *chunk = (Chunk *)ptr - 1;
+    chunk->is_free = 1;
+    ch_coalesce_chunk(chunk);
 }
