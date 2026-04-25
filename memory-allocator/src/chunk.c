@@ -1,20 +1,14 @@
 #include <sys/mman.h>
 #include <stdio.h>
-#include <string.h>
 #include <assert.h>
+#include <string.h>
+#include "../include/chunk.h"
 
-#define CHUNK_HEADER_SIZE sizeof(Chunk)
-#define PAGE_SIZE 4096
-#define HEAP_SIZE (PAGE_SIZE * 256)
-
-// reference article: https://rahalkar.dev/posts/2025-10-25-writing-memory-allocator-heap-internals/
-typedef struct Chunk {
-    size_t size;
-    int is_free;
-    struct Chunk *next;
-    struct Chunk *prev;
-} Chunk;
-
+/*
+ *
+ *
+ * learn about alignmetn and how to do them in c
+*/
 
 static Chunk *heap_start = NULL;
 static void *heap_end = NULL;
@@ -89,10 +83,20 @@ void ch_coalesce_chunk(Chunk *chunk){
 
     }
 }
+
+void ch_free(void *ptr){
+    if (!ptr) return;
+
+    Chunk *chunk = (Chunk *)ptr - 1;
+    chunk->is_free = 1;
+    ch_coalesce_chunk(chunk);
+}
+
 void* ch_alloc(size_t size){
     if (size == 0) return NULL;
     if (!heap_start) heap_init();
 
+    size = ALIGN_UP(size);
     // first i need to check if there is a free chunk
     // if there is one, i simply return a pointer to it
     Chunk *free_chunk = ch_find_free_chunk(size);
@@ -108,10 +112,23 @@ void* ch_alloc(size_t size){
     return (void *)(free_chunk + 1);
 }
 
-void ch_free(void *ptr){
-    if (!ptr) return;
-
+void* ch_realloc(void *ptr, size_t size){
+    if (!ptr) return NULL;
     Chunk *chunk = (Chunk *)ptr - 1;
-    chunk->is_free = 1;
-    ch_coalesce_chunk(chunk);
+
+    // this chunk already has enough chunks
+    // so no need to reallocate
+    if (chunk->size >= size) return ptr;
+    size = ALIGN_UP(size);
+
+    void *new_ptr = ch_alloc(size);
+    if (!new_ptr) return NULL;
+
+
+    // this is essentially copying all the contents
+    // (including the header of the older chunk into the new one)
+    memcpy(new_ptr, ptr, chunk->size);
+    ch_free(ptr);
+    return new_ptr;
 }
+

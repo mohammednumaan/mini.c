@@ -1,9 +1,11 @@
 #include <stdio.h>
 
+#define ALIGN 16
 #define PAGES 256
 #define CHUNK_HEADER_SIZE sizeof(Chunk)
 #define PAGE_SIZE 4096
 #define HEAP_SIZE (PAGE_SIZE * PAGES)
+#define ALIGN_UP(size) (((size) + (ALIGN - 1)) & ~(ALIGN - 1))
 
 typedef struct Chunk {
     size_t size;
@@ -18,4 +20,6 @@ void ch_coalesce_chunk(Chunk *chunk);
 void ch_free(void *ptr);
 
 void* ch_alloc(size_t size);
+void* ch_realloc(void *ptr, size_t size);
 Chunk* ch_find_free_chunk(size_t size);
+
